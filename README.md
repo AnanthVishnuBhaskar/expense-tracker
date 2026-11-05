@@ -77,3 +77,30 @@ The tests use a fake model, so they don't call the Claude API.
 | POST | `/api/settings/detect` | Sets the home currency from the browser's time zone and locale until you pick one |
 
 Interactive docs are at http://localhost:8001/docs.
+
+## Deploy to Railway
+
+The root `Dockerfile` builds one image that runs everything: the API, the receipt readers and
+the web app, on one address. `railway.json` tells Railway to use it, and the container applies
+database migrations each time it starts.
+
+1. In a Railway project, add a **PostgreSQL** database, then an empty service for the app.
+2. Deploy the code to the app service: connect the GitHub repo, or run `railway up` from this
+   folder with the Railway CLI.
+3. On the app service, add a **Volume** mounted at `/data`. Receipt photos live there and
+   survive redeploys.
+4. Set these variables on the app service:
+
+   | Variable | Value |
+   | --- | --- |
+   | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (a reference to the database) |
+   | `ANTHROPIC_API_KEY` | your key |
+   | `SESSION_SECRET` | a long random string, e.g. from `openssl rand -base64 32` |
+   | `UPLOAD_DIR` | `/data/uploads` |
+   | `COOKIE_SECURE` | `true` |
+   | `HSTS` | `true` |
+
+5. Under **Networking**, generate a domain, open it and create your account. Once everyone who
+   should have an account has one, set `ALLOW_SIGNUP=false`.
+
+Keep the app at one replica: the receipt readers and rate limits run inside the process.

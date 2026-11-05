@@ -102,6 +102,17 @@ def client_key(request: Request) -> str:
 # --- Response headers ---------------------------------------------------------------------
 
 
+# For the web app itself when the API serves it: its own scripts, Inter from Google Fonts,
+# inline styles (animations set them), and photo previews from blob: URLs.
+APP_CSP = (
+    "default-src 'self'; script-src 'self'; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; "
+    "connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; "
+    "frame-ancestors 'none'"
+)
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, *, hsts: bool):
         super().__init__(app)
@@ -115,8 +126,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         h.setdefault("Referrer-Policy", "no-referrer")
         h.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         h.setdefault("Cross-Origin-Resource-Policy", "same-origin")
-        if not request.url.path.startswith(("/docs", "/redoc", "/openapi.json")):
+        path = request.url.path
+        if path.startswith("/api/"):
             h.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+        elif not path.startswith(("/docs", "/redoc", "/openapi.json")):
+            h.setdefault("Content-Security-Policy", APP_CSP)
         if request.url.path.startswith("/api/"):
             h.setdefault("Cache-Control", "no-store")
         if self.hsts:

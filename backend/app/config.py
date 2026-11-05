@@ -23,6 +23,9 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://expense:expense@localhost:5432/expense"
     upload_dir: Path = Path("data/uploads")
+    # The built frontend (frontend/dist). When set, the API serves the web app too, so one
+    # service runs everything; the Docker image sets it.
+    static_dir: Path | None = None
     # Falls back to the SDK's own lookup (ANTHROPIC_API_KEY env var or `ant auth login`).
     anthropic_api_key: str | None = None
 
@@ -55,6 +58,16 @@ class Settings(BaseSettings):
     uploads_per_hour: int = 60
     max_files_per_upload: int = 20
     login_attempts_per_15_min: int = 10
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _psycopg_driver(cls, v: str) -> str:
+        # Hosts such as Railway hand out postgres://… or postgresql://…; SQLAlchemy needs the
+        # driver named to use psycopg 3.
+        for prefix in ("postgres://", "postgresql://"):
+            if isinstance(v, str) and v.startswith(prefix):
+                return "postgresql+psycopg://" + v[len(prefix) :]
+        return v
 
     @field_validator("session_secret", mode="before")
     @classmethod
