@@ -169,17 +169,19 @@ def _sign(secret: str, payload: str) -> str:
     return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
 
 
-def sign_session(secret: str, user_id: int, ttl_seconds: int) -> str:
-    payload = f"{user_id}.{int(time.time()) + ttl_seconds}"
+def sign_session(secret: str, user_id: int, version: int, ttl_seconds: int, remember: bool) -> str:
+    payload = f"{user_id}.{version}.{int(time.time()) + ttl_seconds}.{int(remember)}"
     return f"{payload}.{_sign(secret, payload)}"
 
 
-def session_user_id(secret: str, token: str | None) -> int | None:
-    """The signed-in user's id, or None if the cookie is missing, forged or expired."""
+def session_user(secret: str, token: str | None) -> tuple[int, int, bool] | None:
+    """(user id, session version, remembered) from the cookie; None if missing, forged or expired."""
     parts = (token or "").split(".")
-    if len(parts) != 3 or not parts[0].isdigit() or not parts[1].isdigit():
+    if len(parts) != 5 or not all(p.isdigit() for p in parts[:4]):
         return None
-    user_id, expires, sig = parts
-    if not hmac.compare_digest(sig, _sign(secret, f"{user_id}.{expires}")):
+    user_id, version, expires, remember, sig = parts
+    if not hmac.compare_digest(sig, _sign(secret, f"{user_id}.{version}.{expires}.{remember}")):
         return None
-    return int(user_id) if int(expires) > time.time() else None
+    if int(expires) <= time.time():
+        return None
+    return int(user_id), int(version), remember == "1"

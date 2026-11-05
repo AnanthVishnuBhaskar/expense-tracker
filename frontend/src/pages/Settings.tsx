@@ -114,6 +114,8 @@ export function SettingsPage() {
         )}
       </section>
 
+      <PasswordSection hasPassword={me?.has_password ?? true} />
+
       <section className="card flex items-center justify-between gap-4 p-6">
         <div className="min-w-0">
           <h2 className="font-semibold">Account</h2>
@@ -128,6 +130,103 @@ export function SettingsPage() {
         </button>
       </section>
     </div>
+  )
+}
+
+function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
+  const qc = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [again, setAgain] = useState('')
+  const change = useMutation({
+    mutationFn: () => api.changePassword(current, next),
+    onSuccess: (me) => {
+      qc.setQueryData(['me'], me)
+      setOpen(false)
+      setCurrent('')
+      setNext('')
+      setAgain('')
+      toast.success('Password changed. Your other devices were signed out.')
+    },
+  })
+  const mismatch = again.length > 0 && again !== next
+  return (
+    <section className="card p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="font-semibold">Password</h2>
+          <p className="text-muted mt-1 text-sm">
+            {hasPassword
+              ? 'Changing it signs you out everywhere else, and we email you to say so.'
+              : 'You sign in with Google, Microsoft or Apple. To add a password, sign out and use Forgot password?.'}
+          </p>
+        </div>
+        {hasPassword && !open && (
+          <button
+            onClick={() => setOpen(true)}
+            className="shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium text-[var(--brand)] transition hover:bg-[var(--border)]"
+          >
+            Change
+          </button>
+        )}
+      </div>
+      {open && (
+        <form
+          className="mt-5 grid gap-3 sm:max-w-sm"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (current && next && next === again) change.mutate()
+          }}
+        >
+          <input
+            type="password"
+            autoComplete="current-password"
+            placeholder="Current password"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+            className="field"
+            autoFocus
+          />
+          <input
+            type="password"
+            autoComplete="new-password"
+            placeholder="New password (at least 8 characters)"
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+            className="field"
+          />
+          <input
+            type="password"
+            autoComplete="new-password"
+            placeholder="New password again"
+            value={again}
+            onChange={(e) => setAgain(e.target.value)}
+            className="field"
+          />
+          {mismatch && <p className="text-bad text-sm font-medium">The new passwords don't match.</p>}
+          {change.error && <p className="text-bad text-sm font-medium">{change.error.message}</p>}
+          <div className="flex gap-2">
+            <button
+              disabled={change.isPending || !current || !next || next !== again}
+              className="btn-primary px-4 py-2 text-sm"
+            >
+              {change.isPending ? 'Saving…' : 'Save new password'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                change.reset()
+              }}
+              className="btn-secondary px-4 py-2 text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
   )
 }
 

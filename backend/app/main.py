@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from app.api import auth, expenses, receipts, settings, summary
+from app.api import auth, expenses, receipts, settings, social, summary
 from app.config import get_settings
 from app.db import SessionLocal
 from app.deps import current_user, get_ai
@@ -20,6 +20,10 @@ config = get_settings()
 log = logging.getLogger(__name__)
 if not (config.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY")):
     log.warning("ANTHROPIC_API_KEY is not set: receipts can't be read until it is.")
+if config.email_console:
+    log.warning("EMAIL_CONSOLE is on: emails are printed to this log, not sent. Local use only.")
+elif not config.email_enabled:
+    log.warning("No email provider is set up, so signing up with an email address is off.")
 
 
 @asynccontextmanager
@@ -44,6 +48,7 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 app.include_router(auth.router)
+app.include_router(social.router)
 protected = [Depends(current_user)]
 for module in (receipts, expenses, settings, summary):
     app.include_router(module.router, dependencies=protected)

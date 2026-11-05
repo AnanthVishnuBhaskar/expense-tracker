@@ -41,7 +41,7 @@ class Settings(BaseSettings):
         "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@{tag}/v1/currencies/{base}.min.json",
         "https://{tag}.currency-api.pages.dev/v1/currencies/{base}.min.json",
     ]
-    cors_origins: list[str] = ["http://localhost:5173"]
+    cors_origins: list[str] = ["http://localhost:5174"]
     process_in_background: bool = True
     # How many receipts are read at the same time; more speeds up batches but risks rate limits.
     reader_workers: int = 4
@@ -50,14 +50,76 @@ class Settings(BaseSettings):
     allow_signup: bool = True
     # Empty: a random one kept in data/session_secret.
     session_secret: str = Field(default="", validate_default=True)
-    session_ttl_hours: int = 24 * 14
+    # "Keep me signed in" lasts this long; otherwise the session ends with the browser, and at
+    # the latest after session_short_hours.
+    session_ttl_hours: int = 24 * 30
+    session_short_hours: int = 12
     cookie_secure: bool = False  # set true when served over HTTPS
     hsts: bool = False
+
+    # Email, for confirming new accounts and resetting passwords. Set EMAIL_FROM plus one way to
+    # send: RESEND_API_KEY, BREVO_API_KEY, or SMTP_HOST (with SMTP_USERNAME/SMTP_PASSWORD, e.g. a
+    # Gmail app password). Railway blocks SMTP below its Pro plan, so use an API there. Every
+    # email sign-up must be confirmed, so without one of these only social sign-in is offered.
+    email_from: str = ""  # e.g. "Receipts <receipts@yourdomain.com>"
+    resend_api_key: str = ""
+    brevo_api_key: str = ""
+    smtp_host: str = ""
+    smtp_port: int = 587  # 465 for implicit TLS
+    smtp_username: str = ""
+    smtp_password: str = ""
+    # Local testing only: print emails (with their links) to the server log instead of sending.
+    email_console: bool = False
+    # The site's public address, used in email links. On Railway it's filled in from
+    # RAILWAY_PUBLIC_DOMAIN; links never trust the request's Host header.
+    app_url: str = ""
+    railway_public_domain: str = ""
+    # Social sign-in. Each provider is offered once its keys are set; the redirect URI to
+    # register with each is <site address>/api/auth/<provider>/callback. See the README.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
+    apple_client_id: str = ""  # the Services ID, e.g. com.example.receipts.web
+    apple_team_id: str = ""
+    apple_key_id: str = ""
+    apple_private_key: str = ""  # contents of the .p8 file
+    verify_link_hours: int = 48
+    reset_link_minutes: int = 60
 
     # Abuse limits (per client IP).
     uploads_per_hour: int = 60
     max_files_per_upload: int = 20
     login_attempts_per_15_min: int = 10
+    emails_per_hour: int = 10
+
+    @property
+    def email_enabled(self) -> bool:
+        if self.email_console:
+            return True
+        return bool(
+            self.email_from and (self.resend_api_key or self.brevo_api_key or self.smtp_host)
+        )
+
+    @property
+    def social_providers(self) -> list[str]:
+        on = {
+            "google": self.google_client_id and self.google_client_secret,
+            "microsoft": self.microsoft_client_id and self.microsoft_client_secret,
+            "apple": self.apple_client_id
+            and self.apple_team_id
+            and self.apple_key_id
+            and self.apple_private_key,
+        }
+        return [name for name, ok in on.items() if ok]
+
+    @property
+    def public_url(self) -> str:
+        if self.app_url:
+            return self.app_url.rstrip("/")
+        if self.railway_public_domain:
+            return f"https://{self.railway_public_domain}"
+        return "http://localhost:5174"
 
     @field_validator("database_url", mode="before")
     @classmethod

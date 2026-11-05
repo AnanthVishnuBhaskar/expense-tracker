@@ -4,17 +4,20 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import Category, User
-from tests.conftest import TEST_EMAIL, TEST_PASSWORD, make_extraction, upload
+from tests.conftest import (
+    TEST_EMAIL,
+    TEST_PASSWORD,
+    confirmed_signup,
+    make_extraction,
+    upload,
+)
 
 
 def second_user(name="XYZ User", email="xyz@example.com") -> TestClient:
     from app.main import app
 
     c = TestClient(app)
-    resp = c.post(
-        "/api/auth/signup", json={"name": name, "email": email, "password": "another password"}
-    )
-    assert resp.status_code == 201, resp.text
+    confirmed_signup(c, name, email, "another password")
     return c
 
 
@@ -25,6 +28,10 @@ def test_signup_signs_you_in_with_default_categories(client):
         "name": "ABC User",
         "email": TEST_EMAIL,
         "signup_open": True,
+        "email_enabled": True,
+        "social_providers": [],
+        "has_password": True,
+        "verification_sent_to": None,
     }
     assert len(client.get("/api/categories").json()) > 5
 

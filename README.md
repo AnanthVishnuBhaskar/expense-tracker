@@ -33,7 +33,7 @@ uv run uvicorn app.main:app --reload --port 8001   # the frontend proxies /api h
 # 3. Frontend (new terminal)
 cd frontend
 npm install
-npm run dev                   # http://localhost:5173
+npm run dev                   # http://localhost:5174 (pinned; set WEB_PORT and APP_URL to change it)
 ```
 
 To try the UI without an API key, load sample data: `cd backend && uv run python -m scripts.seed_demo`, then sign in as `abc@example.com` / `demo-password-123`.
@@ -103,4 +103,55 @@ database migrations each time it starts.
 5. Under **Networking**, generate a domain, open it and create your account. Once everyone who
    should have an account has one, set `ALLOW_SIGNUP=false`.
 
-Keep the app at one replica: the receipt readers and rate limits run inside the process.
+### Email: confirming accounts and resetting passwords
+
+Every email sign-up must click a link we email before the account can be used, and the sign-in
+page offers **Forgot password?**. Links point at the Railway domain automatically (set `APP_URL`
+for a custom domain), never at the address a request claims to come from. Without a way to send
+email, signing up with an email address is switched off and only the buttons below are offered.
+
+Set `EMAIL_FROM` plus one provider:
+
+| Provider | Variables | Notes |
+| --- | --- | --- |
+| [Brevo](https://www.brevo.com) | `BREVO_API_KEY` | Free tier; can send from a single verified address, e.g. a Gmail one, without owning a domain. |
+| [Resend](https://resend.com) | `RESEND_API_KEY` | Needs a domain you own to email anyone but yourself. |
+| SMTP, e.g. Gmail | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | Gmail: `smtp.gmail.com`, port 587, and an [app password](https://myaccount.google.com/apppasswords). Railway blocks SMTP below its Pro plan. |
+
+For local testing, `EMAIL_CONSOLE=true` prints each email, link included, in the backend's log
+instead of sending it.
+
+How it's kept safe:
+- Links are single use, stored only as hashes, and expire (48 hours to confirm, 60 minutes to
+  reset). A newer link voids older ones, and changing the password voids them all.
+- Resetting or changing a password signs the account out everywhere else and emails a
+  "your password was changed" alert. Changing it in Settings asks for the current one.
+- Unknown addresses get the same answer as known ones; sends and sign-in attempts are rate
+  limited per address and per account.
+- **Keep me signed in** keeps a session for 30 days; otherwise it ends when the browser closes
+  (and after 12 hours at most).
+
+### Sign in with Google, Microsoft or Apple
+
+Each button appears once its variables are set. Register this redirect URI with each provider:
+`https://<your domain>/api/auth/<google|microsoft|apple>/callback`.
+
+- **Google** ([Cloud Console](https://console.cloud.google.com/apis/credentials)): set up the
+  OAuth consent screen (External) and publish it, then create an OAuth client ID of type *Web
+  application*. Variables: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
+- **Microsoft** (Outlook, Hotmail, Live; [Entra app registrations](https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)):
+  new registration for *accounts in any organizational directory and personal Microsoft
+  accounts*, with a *Web* redirect URI; then add a client secret (note when it expires).
+  Variables: `MICROSOFT_CLIENT_ID` (the Application ID), `MICROSOFT_CLIENT_SECRET` (the secret's
+  value). Work and school accounts are only matched by email if you add the optional `xms_edov`
+  ID-token claim under *Token configuration*.
+- **Apple** (needs the paid [Apple Developer Program](https://developer.apple.com/account)):
+  create a Services ID with Sign in with Apple, your domain and the return URL, and a key with
+  Sign in with Apple. Variables: `APPLE_CLIENT_ID` (the Services ID), `APPLE_TEAM_ID`,
+  `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` (the .p8 file's contents). Apple only works over HTTPS, so
+  not on localhost.
+
+Sign-in uses the authorization code flow with a per-browser state, a nonce and (Google,
+Microsoft) PKCE; the ID token's signature, issuer, audience and expiry are checked against the
+provider's published keys. Only an email the provider vouches for is used to find an existing
+account, and doing so removes any password set on it by someone who never confirmed the address.

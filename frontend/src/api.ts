@@ -254,15 +254,27 @@ export interface AuthStatus {
   name: string | null
   email: string | null
   signup_open: boolean
+  email_enabled: boolean
+  social_providers: ('google' | 'microsoft' | 'apple')[]
+  has_password: boolean
+  verification_sent_to: string | null
 }
 
 export const api = {
   me: () => request<AuthStatus>('/api/auth/me'),
-  login: (body: { email: string; password: string }) =>
+  login: (body: { email: string; password: string; remember: boolean }) =>
     request<AuthStatus>('/api/auth/login', json('POST', body)),
   signup: (body: { name: string; email: string; password: string }) =>
     request<AuthStatus>('/api/auth/signup', json('POST', body)),
   logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
+  resendVerification: (email: string) =>
+    request<void>('/api/auth/resend-verification', json('POST', { email })),
+  verifyEmail: (token: string) => request<AuthStatus>('/api/auth/verify-email', json('POST', { token })),
+  changePassword: (current_password: string, new_password: string) =>
+    request<AuthStatus>('/api/auth/change-password', json('POST', { current_password, new_password })),
+  forgotPassword: (email: string) => request<void>('/api/auth/forgot-password', json('POST', { email })),
+  resetPassword: (token: string, password: string) =>
+    request<AuthStatus>('/api/auth/reset-password', json('POST', { token, password })),
   uploadReceipts(files: File[]) {
     const form = new FormData()
     files.forEach((f) => form.append('files', f))

@@ -35,7 +35,7 @@ DEFAULT_CATEGORIES = [
 ]
 
 
-def create_user(db: Session, *, name: str, email: str, password_hash: str) -> User:
+def create_user(db: Session, *, name: str, email: str, password_hash: str | None) -> User:
     """A new account with the default categories."""
     user = User(name=name, email=email, password_hash=password_hash)
     db.add(user)

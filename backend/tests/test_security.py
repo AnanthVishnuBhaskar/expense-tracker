@@ -114,3 +114,28 @@ def test_missing_api_key_gives_a_clear_error(monkeypatch):
     ai = AnthropicReceiptAI(Settings(anthropic_api_key=None))
     with pytest.raises(AIError, match="No Claude API key"):
         ai.check_quality(b"x", "image/jpeg")
+
+
+def test_keep_me_signed_in(client):
+    from app.main import app
+
+    def cookie_header(remember: bool) -> str:
+        c = TestClient(app)
+        body = {"email": TEST_EMAIL, "password": TEST_PASSWORD, "remember": remember}
+        resp = c.post("/api/auth/login", json=body)
+        assert resp.status_code == 200
+        assert c.get("/api/expenses").status_code == 200
+        return resp.headers["set-cookie"]
+
+    # Ticked: a lasting cookie (30 days). Not ticked: gone when the browser closes.
+    assert "Max-Age=2592000" in cookie_header(True)
+    assert "Max-Age" not in cookie_header(False)
+
+
+def test_short_sessions_expire_on_the_server_too(client, monkeypatch):
+    from app.security import session_user, sign_session
+
+    token = sign_session("abc-secret", 7, 0, 60, remember=False)
+    assert session_user("abc-secret", token) == (7, 0, False)
+    monkeypatch.setattr("app.security.time.time", lambda: 10**12)
+    assert session_user("abc-secret", token) is None

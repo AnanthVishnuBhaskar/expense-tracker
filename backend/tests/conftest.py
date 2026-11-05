@@ -1,5 +1,6 @@
 import io
 import os
+import re
 
 os.environ.setdefault(
     "DATABASE_URL", "postgresql+psycopg://expense:expense@localhost:5432/expense_test"
@@ -12,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw
 
-from app.api.auth import login_limiter
+from app.api.auth import account_limiter, email_limiter, login_limiter
 from app.api.receipts import ai_limiter
 from app.config import get_settings
 from app.db import Base, engine
@@ -169,6 +170,40 @@ def receipt_png(tag: str = "") -> bytes:
     return out.getvalue()
 
 
+OUTBOX: list[dict] = []
+
+
+@pytest.fixture(autouse=True)
+def outbox(monkeypatch):
+    """Email is on in tests, and what the app sends lands here; nothing leaves the machine."""
+    OUTBOX.clear()
+    s = get_settings()
+    monkeypatch.setattr(s, "email_from", "Receipts <receipts@abc.example>")
+    monkeypatch.setattr(s, "resend_api_key", "test-key")
+    monkeypatch.setattr(s, "app_url", "https://abc.example")
+
+    def fake_send(settings, to, subject, text, html):
+        OUTBOX.append({"to": to, "subject": subject, "text": text, "html": html})
+
+    monkeypatch.setattr("app.accounts.send_email", fake_send)
+    return OUTBOX
+
+
+def link_token(mail: dict, path: str) -> str:
+    m = re.search(rf"https://abc\.example/{path}\?token=([\w-]+)", mail["text"])
+    assert m, mail["text"]
+    return m.group(1)
+
+
+def confirmed_signup(c, name: str, email: str, password: str) -> None:
+    """Sign up and follow the emailed link, leaving `c` signed in."""
+    resp = c.post("/api/auth/signup", json={"name": name, "email": email, "password": password})
+    assert resp.status_code == 201, resp.text
+    mail = next(m for m in reversed(OUTBOX) if m["to"] == email.lower())
+    resp = c.post("/api/auth/verify-email", json={"token": link_token(mail, "verify-email")})
+    assert resp.status_code == 200, resp.text
+
+
 @pytest.fixture
 def fake_ai():
     return FakeAI()
@@ -183,12 +218,10 @@ def client(fake_ai, tmp_path):
     ai_limiter.reset()
     fx.forget_misses()
     login_limiter.reset()
+    email_limiter.reset()
+    account_limiter.reset()
     with TestClient(app) as c:
-        resp = c.post(
-            "/api/auth/signup",
-            json={"name": "ABC User", "email": TEST_EMAIL, "password": TEST_PASSWORD},
-        )
-        assert resp.status_code == 201, resp.text
+        confirmed_signup(c, "ABC User", TEST_EMAIL, TEST_PASSWORD)
         yield c
     app.dependency_overrides.clear()
 

@@ -87,6 +87,28 @@ body {
   }
 }
 
+@utility btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-weight: 600;
+  transition: background 0.15s;
+  &:hover {
+    background: var(--sunken);
+  }
+}
+
+@utility link {
+  font-weight: 500;
+  color: var(--brand);
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
 @utility bg-sunken {
   background: var(--sunken);
 }

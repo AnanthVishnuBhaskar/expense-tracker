@@ -47,6 +47,42 @@ class User(Base):
     home_currency_source: Mapped[str] = mapped_column(
         String(16), default="default", server_default="default"
     )
+    # Set once the owner clicks the link we email them (or resets their password by email).
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Part of every session cookie; bumping it signs the account out everywhere.
+    session_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SocialLogin(Base):
+    """A Google, Microsoft or Apple identity that signs in to this account."""
+
+    __tablename__ = "social_logins"
+    __table_args__ = (UniqueConstraint("provider", "subject"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(16))
+    # The provider's stable id for the person (never their email, which can change).
+    subject: Mapped[str] = mapped_column(String(255))
+    email: Mapped[str | None] = mapped_column(String(254))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AuthToken(Base):
+    """A single-use link we emailed: confirm an address, or reset a password."""
+
+    __tablename__ = "auth_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    purpose: Mapped[str] = mapped_column(String(16))  # "verify" or "reset"
+    # Only a hash is kept, so a leaked database can't be turned into working links.
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    # Ties the link to the password at the time, so changing the password voids old links.
+    password_fingerprint: Mapped[str] = mapped_column(String(16))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
