@@ -184,3 +184,28 @@ def notify_sign_in_added(settings: Settings, user: User, provider: str) -> None:
         f"{provider} sign-in added",
         f"Hi {user.name}, your Receipts account can now be opened with {provider}.",
     )
+
+
+def notify_account_deleted(settings: Settings, email: str | None, name: str) -> None:
+    """The last email we send: a receipt for the deletion. Best effort, like the other notices."""
+    if not settings.email_enabled or not email:
+        return
+    intro = (
+        f"Hi {name}, your Receipts account was closed and everything in it was deleted: "
+        "your receipts and their photos, expenses, categories, budgets and sign-in methods."
+    )
+    outro = (
+        "This can't be undone, and we won't email you again. If you didn't do this, someone "
+        "had your password; change it anywhere else you used it."
+    )
+    url = f"{settings.public_url}/"
+    try:
+        send_email(
+            settings,
+            email,
+            "Your Receipts account was deleted",
+            f"{intro}\n\n{outro}\n",
+            _layout("Your account was deleted", intro, "Open Receipts", url, outro),
+        )
+    except EmailError:
+        log.warning("couldn't send the account-deleted notice")

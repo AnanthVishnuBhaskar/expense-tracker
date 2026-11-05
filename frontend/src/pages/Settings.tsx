@@ -8,7 +8,6 @@ import { CategoryIcon } from '../components/CategoryIcon'
 import { Select } from '../components/Select'
 import { currencyName, currencyOptions, useChangeHomeCurrency } from '../lib/currency'
 
-
 export function SettingsPage() {
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: api.settings })
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: api.me, staleTime: Infinity })
@@ -16,9 +15,7 @@ export function SettingsPage() {
   const { data: budgets = [] } = useQuery({ queryKey: ['budgets'], queryFn: api.budgets })
   const [changing, setChanging] = useState(false)
   const [adding, setAdding] = useState<number[]>([])
-  const unbudgeted = categories.filter(
-    (c) => !budgets.some((b) => b.category_id === c.id) && !adding.includes(c.id),
-  )
+  const unbudgeted = categories.filter((c) => !budgets.some((b) => b.category_id === c.id) && !adding.includes(c.id))
 
   const update = useChangeHomeCurrency()
 
@@ -40,9 +37,7 @@ export function SettingsPage() {
               {currencyName.of(currency)} <span className="text-muted">({currency})</span>
             </p>
             <p className="text-muted mt-1 text-sm">
-              {settings.home_currency_source === 'user'
-                ? 'Chosen by you.'
-                : 'Set automatically from where you are.'}{' '}
+              {settings.home_currency_source === 'user' ? 'Chosen by you.' : 'Set automatically from where you are.'}{' '}
               Receipts keep their own currency and are converted to this for totals and budgets.
             </p>
           </div>
@@ -83,12 +78,26 @@ export function SettingsPage() {
         <h2 className="font-semibold">Monthly budgets</h2>
         <p className="text-muted mt-1 mb-5 text-sm">Optional. You'll get a heads-up at 80% and when one is passed.</p>
         <div className="space-y-3">
-          <BudgetRow key={`all-${budgets.find((b) => b.category_id === null)?.amount}`} label="Overall" currency={currency} budget={budgets.find((b) => b.category_id === null)} categoryId={null} />
+          <BudgetRow
+            key={`all-${budgets.find((b) => b.category_id === null)?.amount}`}
+            label="Overall"
+            currency={currency}
+            budget={budgets.find((b) => b.category_id === null)}
+            categoryId={null}
+          />
           {/* Only categories you've budgeted (or just added) are listed, to keep this short. */}
           {categories
             .filter((c) => budgets.some((b) => b.category_id === c.id) || adding.includes(c.id))
             .map((c) => (
-              <BudgetRow key={`${c.id}-${budgets.find((b) => b.category_id === c.id)?.amount}`} category={c} label={c.name} currency={currency} budget={budgets.find((b) => b.category_id === c.id)} categoryId={c.id} onRemove={() => setAdding((a) => a.filter((id) => id !== c.id))} />
+              <BudgetRow
+                key={`${c.id}-${budgets.find((b) => b.category_id === c.id)?.amount}`}
+                category={c}
+                label={c.name}
+                currency={currency}
+                budget={budgets.find((b) => b.category_id === c.id)}
+                categoryId={c.id}
+                onRemove={() => setAdding((a) => a.filter((id) => id !== c.id))}
+              />
             ))}
         </div>
         {unbudgeted.length > 0 && (
@@ -129,7 +138,109 @@ export function SettingsPage() {
           <LogOut size={16} /> Sign out
         </button>
       </section>
+
+      <DeleteAccountSection email={me?.email ?? null} hasPassword={me?.has_password ?? true} />
     </div>
+  )
+}
+
+function DeleteAccountSection({ email, hasPassword }: { email: string | null; hasPassword: boolean }) {
+  const qc = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const [confirm, setConfirm] = useState('')
+  const [password, setPassword] = useState('')
+  const expected = email ?? 'DELETE'
+  const typed = confirm.trim().toLowerCase() === expected.toLowerCase()
+  const remove = useMutation({
+    mutationFn: () => api.deleteAccount(confirm, password),
+    onSuccess: () => {
+      qc.clear()
+      window.location.replace('/?notice=account-deleted')
+    },
+  })
+  return (
+    <section className="card p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="font-semibold">Delete account</h2>
+          <p className="text-muted mt-1 text-sm">
+            Closes your account and permanently deletes all of it: receipts and their photos, expenses, categories,
+            budgets and sign-in methods. This can't be undone.
+          </p>
+        </div>
+        {!open && (
+          <button
+            onClick={() => setOpen(true)}
+            aria-label="Delete account"
+            title="Delete account"
+            className="text-bad shrink-0 rounded-lg p-2 transition hover:bg-[var(--border)]"
+          >
+            <Trash2 size={18} />
+          </button>
+        )}
+      </div>
+      {open && (
+        <form
+          className="mt-5 grid gap-3 sm:max-w-sm"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (typed && (password || !hasPassword)) remove.mutate()
+          }}
+        >
+          <p className="text-sm">
+            Want a copy first?{' '}
+            <a href={api.exportUrl()} className="link">
+              Download all your expenses (CSV)
+            </a>
+          </p>
+          <label className="grid gap-1.5 text-sm">
+            <span>
+              Type <span className="font-semibold">{expected}</span> to confirm
+            </span>
+            <input
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              className="field"
+              autoFocus
+            />
+          </label>
+          {hasPassword && (
+            <input
+              type="password"
+              autoComplete="current-password"
+              placeholder="Your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="field"
+            />
+          )}
+          {remove.error && <p className="text-bad text-sm font-medium">{remove.error.message}</p>}
+          <div className="flex gap-2">
+            <button
+              disabled={remove.isPending || !typed || (hasPassword && !password)}
+              className="rounded-lg bg-[var(--bad)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+            >
+              {remove.isPending ? 'Deleting…' : 'Delete my account and data'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                setConfirm('')
+                setPassword('')
+                remove.reset()
+              }}
+              className="btn-secondary px-4 py-2 text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
   )
 }
 
@@ -279,10 +390,16 @@ function BudgetRow({
 
   return (
     <div className="flex items-center gap-3">
-      {category ? <CategoryIcon icon={category.icon} color={category.color} size="sm" /> : <span className="h-8 w-8 rounded-xl bg-brand-100 dark:bg-brand-700/40" />}
+      {category ? (
+        <CategoryIcon icon={category.icon} color={category.color} size="sm" />
+      ) : (
+        <span className="h-8 w-8 rounded-xl bg-brand-100 dark:bg-brand-700/40" />
+      )}
       <span className="flex-1 font-semibold">{label}</span>
       <div className="relative w-40">
-        <span className="text-muted pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-xs font-semibold">{currency}</span>
+        <span className="text-muted pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-xs font-semibold">
+          {currency}
+        </span>
         <input
           inputMode="decimal"
           value={value}

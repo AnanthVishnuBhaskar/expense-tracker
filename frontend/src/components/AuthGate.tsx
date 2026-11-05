@@ -68,17 +68,25 @@ function useEnter() {
 type View = 'signin' | 'signup' | 'forgot' | { sent: 'verify' | 'reset'; to: string }
 
 /** An error the server sent back after a Google/Microsoft/Apple sign-in, shown once. */
-function useReturnedError() {
-  const [error] = useState(() => new URLSearchParams(window.location.search).get('auth_error'))
+const NOTICES: Record<string, string> = {
+  'account-deleted': 'Your account and everything in it were deleted.',
+}
+
+/** A message handed over in the address, e.g. after a provider sign-in fails or an account is closed. */
+function useReturned() {
+  const [returned] = useState(() => {
+    const q = new URLSearchParams(window.location.search)
+    return { error: q.get('auth_error'), notice: NOTICES[q.get('notice') ?? ''] ?? null }
+  })
   useEffect(() => {
-    if (error) window.history.replaceState(null, '', '/')
-  }, [error])
-  return error
+    if (returned.error || returned.notice) window.history.replaceState(null, '', '/')
+  }, [returned])
+  return returned
 }
 
 function AuthPage({ status }: { status: AuthStatus }) {
   const enter = useEnter()
-  const returnedError = useReturnedError()
+  const { error: returnedError, notice: returnedNotice } = useReturned()
   const [view, setView] = useState<View>('signin')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -131,10 +139,15 @@ function AuthPage({ status }: { status: AuthStatus }) {
       <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
       <p className="text-muted mt-1.5 text-sm">{subtitle}</p>
       {returnedError && !submit.error && <p className="text-bad mt-6 text-sm font-medium">{returnedError}</p>}
+      {returnedNotice && !submit.error && <p className="text-muted mt-6 text-sm font-medium">{returnedNotice}</p>}
       {!forgot && social.length > 0 && (
         <div className="mt-8 space-y-2.5">
           {social.map((p) => (
-            <a key={p} href={`/api/auth/${p}/start${remember ? '?remember=true' : ''}`} className="btn-secondary w-full gap-2.5 py-2.5">
+            <a
+              key={p}
+              href={`/api/auth/${p}/start${remember ? '?remember=true' : ''}`}
+              className="btn-secondary w-full gap-2.5 py-2.5"
+            >
               <ProviderLogo provider={p} />
               Continue with {PROVIDER_LABEL[p]}
             </a>

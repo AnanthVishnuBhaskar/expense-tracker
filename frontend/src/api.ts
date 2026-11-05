@@ -267,11 +267,12 @@ export const api = {
   signup: (body: { name: string; email: string; password: string }) =>
     request<AuthStatus>('/api/auth/signup', json('POST', body)),
   logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
-  resendVerification: (email: string) =>
-    request<void>('/api/auth/resend-verification', json('POST', { email })),
+  resendVerification: (email: string) => request<void>('/api/auth/resend-verification', json('POST', { email })),
   verifyEmail: (token: string) => request<AuthStatus>('/api/auth/verify-email', json('POST', { token })),
   changePassword: (current_password: string, new_password: string) =>
     request<AuthStatus>('/api/auth/change-password', json('POST', { current_password, new_password })),
+  deleteAccount: (confirm: string, password: string) =>
+    request<void>('/api/auth/delete-account', json('POST', { confirm, password })),
   forgotPassword: (email: string) => request<void>('/api/auth/forgot-password', json('POST', { email })),
   resetPassword: (token: string, password: string) =>
     request<AuthStatus>('/api/auth/reset-password', json('POST', { token, password })),
@@ -280,12 +281,10 @@ export const api = {
     files.forEach((f) => form.append('files', f))
     return request<Receipt[]>('/api/receipts', { method: 'POST', body: form })
   },
-  receipts: (status?: string) =>
-    request<Receipt[]>(`/api/receipts${status ? `?status=${status}` : ''}`),
+  receipts: (status?: string) => request<Receipt[]>(`/api/receipts${status ? `?status=${status}` : ''}`),
   receipt: (id: number) => request<Receipt>(`/api/receipts/${id}`),
   receiptImageUrl: (id: number) => `/api/receipts/${id}/image`,
-  confirm: (id: number, draft: ExpenseDraft) =>
-    request<Expense>(`/api/receipts/${id}/confirm`, json('POST', draft)),
+  confirm: (id: number, draft: ExpenseDraft) => request<Expense>(`/api/receipts/${id}/confirm`, json('POST', draft)),
   discard: (id: number) => request<Receipt>(`/api/receipts/${id}/discard`, { method: 'POST' }),
   retry: (id: number) => request<Receipt>(`/api/receipts/${id}/retry`, { method: 'POST' }),
 
@@ -301,8 +300,7 @@ export const api = {
   exportUrl: (month?: string, period = 'month') =>
     `/api/expenses/export.csv?period=${period}${month ? `&month=${month}` : ''}`,
 
-  summary: (month: string, period = 'month') =>
-    request<MonthSummary>(`/api/summary?month=${month}&period=${period}`),
+  summary: (month: string, period = 'month') => request<MonthSummary>(`/api/summary?month=${month}&period=${period}`),
   yearOverview: (year: number) => request<YearOverview>(`/api/summary/months?year=${year}`),
   categories: () => request<Category[]>('/api/categories'),
   budgets: () => request<Budget[]>('/api/budgets'),

@@ -11,6 +11,7 @@ from app.accounts import (
     VERIFY,
     issue_link,
     mark_verified,
+    notify_account_deleted,
     notify_password_changed,
     send_reset,
     send_verification,
@@ -20,7 +21,7 @@ from app.config import get_settings
 from app.deps import DB, CurrentUser, current_user
 from app.ledger import create_user
 from app.mailer import EmailError
-from app.models import User
+from app.models import Receipt, User
 from app.security import (
     COOKIE,
     RateLimiter,
@@ -70,6 +71,13 @@ class ResetIn(TokenIn):
 class ChangePasswordIn(BaseModel):
     current_password: str = Field(max_length=200)
     new_password: str = Field(max_length=200)
+
+
+class DeleteAccountIn(BaseModel):
+    # The account's email (or DELETE for an account without one), typed out by hand.
+    confirm: str = Field(max_length=254)
+    # Required when the account has a password.
+    password: str = Field(default="", max_length=200)
 
 
 class AuthStatus(BaseModel):
@@ -301,6 +309,35 @@ def change_password(
     _start_session(response, user, remember=_remembered(request))
     notify_password_changed(get_settings(), user)
     return _status(user)
+
+
+@router.post("/delete-account", status_code=204)
+def delete_account(
+    body: DeleteAccountIn, request: Request, response: Response, db: DB, user: CurrentUser
+) -> None:
+    """Close the account for good: every row it owns and every receipt photo."""
+    login_limiter.hit(client_key(request))
+    account_limiter.hit(user.email or str(user.id))
+    if user.password_hash and not verify_password(body.password, user.password_hash):
+        raise HTTPException(403, "Your password isn't right")
+    expected = user.email or "DELETE"
+    if body.confirm.strip().lower() != expected.lower():
+        raise HTTPException(422, f"Type {expected} to confirm")
+    settings = get_settings()
+    photos = list(db.scalars(select(Receipt.image_path).where(Receipt.user_id == user.id)))
+    email, name, user_id = user.email, user.name, user.id
+    # Every table that holds the user's data references users.id with ON DELETE CASCADE.
+    db.delete(user)
+    db.commit()
+    # Photos go once the rows are gone, so a failed commit never leaves receipts without images.
+    for rel in photos:
+        try:
+            (settings.upload_dir / rel).unlink(missing_ok=True)
+        except OSError:
+            log.warning("couldn't delete a receipt photo of deleted user %s", user_id)
+    response.delete_cookie(COOKIE, path="/")
+    log.info("user %s deleted their account (%d photos)", user_id, len(photos))
+    notify_account_deleted(settings, email, name)
 
 
 @router.post("/logout", status_code=204)
